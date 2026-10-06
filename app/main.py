@@ -38,6 +38,12 @@ def main() -> None:
             )
             print(f"{name}: {status}")
         return
+    if args.dry_run and mode == "approval":
+        print("approval dry-run; no private key loaded and no transaction broadcast")
+        return
+    if args.dry_run and mode == "auto":
+        print("auto dry-run rejected: live broadcast is disabled")
+        return
     if mode != "paper" or not args.dry_run:
         print(f"meme-agent mode={mode}; runtime loop is not enabled yet")
         return
