@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "attributes": {
+        "address": "So11111111111111111111111111111111111111112",
+        "base_token_price_usd": "1.25",
+        "reserve_in_usd": "150000"
+      },
+      "relationships": {
+        "base_token": {
+          "data": {
+            "id": "solana_EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          }
+        },
+        "quote_token": {
+          "data": {
+            "id": "solana_So11111111111111111111111111111111111111112"
+          }
+        },
+        "dex": {
+          "data": {
+            "id": "raydium"
+          }
+        }
+      }
+    }
+  ]
+}

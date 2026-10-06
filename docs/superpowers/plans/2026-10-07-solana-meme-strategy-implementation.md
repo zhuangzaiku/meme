@@ -138,6 +138,7 @@ Expected: all selected tests pass.
 
 Files:
 - Modify: app/data/sources/geckoterminal.py
+- Modify: app/data/sources/pipeline.py
 - Create: app/data/sources/solana_market.py
 - Modify: tests/data/test_geckoterminal.py
 - Create: tests/data/test_solana_market.py
@@ -164,6 +165,8 @@ Expected: solana maps to the wrong internal chain and SolanaMarketCollector is m
 - [ ] Step 3: Implement the minimum collector.
 
 In GeckoTerminalSource, map bsc -> bnb, solana -> sol, and preserve other network IDs.
+
+In app/data/sources/pipeline.py, use a chain-aware pool key for event grouping: lowercase EVM pool addresses but preserve Solana Base58 case, and include the chain in the key.
 
 In solana_market.py, for each of the first three candidates:
 1. Call get_account_info(pool_address); skip a missing account.

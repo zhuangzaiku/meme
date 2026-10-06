@@ -45,6 +45,22 @@ async def test_discovery_parses_bsc_and_keeps_base_token() -> None:
 
 
 @pytest.mark.asyncio
+async def test_discovery_normalizes_solana_network_and_addresses() -> None:
+    source = GeckoTerminalSource(
+        "solana",
+        "http://127.0.0.1:7890",
+        transport=fixture_transport("geckoterminal_solana_pools.json"),
+    )
+
+    pools = await source.discover_pools()
+
+    assert pools[0].chain == "sol"
+    assert pools[0].network_id == "solana"
+    assert pools[0].dex_id == "raydium"
+    assert pools[0].price_usd == 1.25
+
+
+@pytest.mark.asyncio
 async def test_discovery_retries_then_marks_degraded() -> None:
     calls: list[int] = []
     source = GeckoTerminalSource(

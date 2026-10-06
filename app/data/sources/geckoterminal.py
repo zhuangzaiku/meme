@@ -111,7 +111,7 @@ class GeckoTerminalSource:
         if not isinstance(raw_data, list):
             raise ValueError("GeckoTerminal response data must be a list")
         candidates: list[PoolCandidate] = []
-        chain = "bnb" if self.network_id == "bsc" else self.network_id
+        chain = {"bsc": "bnb", "solana": "sol"}.get(self.network_id, self.network_id)
         for item in raw_data[: self.max_pools]:
             if not isinstance(item, dict):
                 continue

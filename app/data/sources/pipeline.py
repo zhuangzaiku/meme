@@ -47,18 +47,23 @@ class LiveMarketSource:
         events = await self.collector.collect(candidates)
         if self.external_source is not None:
             events.extend(await self.external_source.collect(candidates))
-        by_pool: dict[str, list[MarketEvent]] = {}
+        by_pool: dict[tuple[str, str], list[MarketEvent]] = {}
         for event in events:
             if event.pool_address is not None:
-                by_pool.setdefault(event.pool_address.lower(), []).append(event)
+                by_pool.setdefault(_pool_key(event.chain, event.pool_address), []).append(event)
         accepted: list[MarketEvent] = []
         now = self.clock()
         for candidate in candidates:
             result = self.fusion.fuse(
                 candidate,
-                by_pool.get(candidate.pool_address.lower(), []),
+                by_pool.get(_pool_key(candidate.chain, candidate.pool_address), []),
                 now,
             )
             if result.status == "ready":
                 accepted.extend(result.events)
         return accepted
+
+
+def _pool_key(chain: str, pool_address: str) -> tuple[str, str]:
+    normalized = pool_address if chain == "sol" else pool_address.lower()
+    return chain, normalized
