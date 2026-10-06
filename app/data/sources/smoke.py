@@ -7,8 +7,11 @@ from dataclasses import dataclass, field
 from app.chains.evm import EvmChainAdapter
 from app.config import Settings, load_settings
 from app.data.connector_health import ConnectorStatus
+from app.data.sources.composite_discovery import CompositePoolDiscovery
 from app.data.sources.evm_market import EvmMarketCollector
 from app.data.sources.geckoterminal import GeckoTerminalSource
+from app.data.sources.pipeline import PoolDiscovery
+from app.main import build_native_discovery
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,7 @@ class MarketSmokeResult:
     events: int
     reasons: list[str] = field(default_factory=list)
     broadcasted: bool = False
+    native_protocols: list[str] = field(default_factory=list)
 
 
 async def run_market_smoke(
@@ -41,13 +45,16 @@ async def run_market_smoke(
             settings.market.proxy_url,
             settings.market.http_timeout_seconds,
         )
-        discovery = GeckoTerminalSource(
+        discovery: PoolDiscovery = GeckoTerminalSource(
             "bsc" if name == "bnb" else name,
             settings.market.proxy_url,
             timeout_seconds=settings.market.http_timeout_seconds,
             max_retries=settings.market.max_retries,
             max_pools=max_pools or settings.market.max_pools_per_chain,
         )
+        native_discovery = build_native_discovery(settings, adapter) if name == "bnb" else None
+        if native_discovery is not None:
+            discovery = CompositePoolDiscovery([native_discovery, discovery])
         try:
             observed_chain_id = await adapter.get_chain_id()
             latest_block = await adapter.get_latest_block()
@@ -86,10 +93,26 @@ async def run_market_smoke(
                     len(candidates),
                     len(events),
                     reasons,
+                    native_protocols=[spec.name for spec in native_discovery.specs]
+                    if native_discovery is not None
+                    else [],
                 )
             )
         except Exception as exc:
-            results.append(MarketSmokeResult(name, "degraded", None, None, 0, 0, [str(exc)]))
+            results.append(
+                MarketSmokeResult(
+                    name,
+                    "degraded",
+                    None,
+                    None,
+                    0,
+                    0,
+                    [str(exc)],
+                    native_protocols=[spec.name for spec in native_discovery.specs]
+                    if native_discovery is not None
+                    else [],
+                )
+            )
         finally:
             await adapter.web3.provider.disconnect()
     return results
@@ -117,6 +140,7 @@ def main() -> None:
             f"{result.chain}: status={result.status} chain_id={result.chain_id} "
             f"latest_block={result.latest_block} pools={result.discovered_pools} "
             f"events={result.events} broadcasted={result.broadcasted} "
+            f"native={','.join(result.native_protocols) or 'none'} "
             f"reasons={'; '.join(result.reasons) or 'none'}"
         )
 

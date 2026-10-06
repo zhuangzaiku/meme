@@ -16,10 +16,13 @@ from app.chains.evm import EvmChainAdapter
 from app.config import MarketChainSettings, Settings, load_settings
 from app.data.collectors import Collector
 from app.data.events import MarketEvent
+from app.data.sources.bsc_discovery import BscPoolDiscovery, ProtocolSpec
+from app.data.sources.composite_discovery import CompositePoolDiscovery
 from app.data.sources.evm_market import EvmMarketCollector
 from app.data.sources.fusion import MarketFusion
 from app.data.sources.geckoterminal import GeckoTerminalSource
-from app.data.sources.pipeline import LiveMarketSource
+from app.data.sources.gmgn import GmgnCalloutSource
+from app.data.sources.pipeline import LiveMarketSource, PoolDiscovery
 from app.execution.paper_broker import PaperBroker
 from app.runtime import PaperRuntime, RuntimeReport
 from app.storage.repository import EventRepository
@@ -178,32 +181,79 @@ def build_market_source(
     chain = settings.chains[name]
     network_id = "bsc" if name == "bnb" else name
     if chain.rpc_http and chain.chain_id is not None:
-        discovery = GeckoTerminalSource(
-            network_id,
-            settings.market.proxy_url,
-            timeout_seconds=settings.market.http_timeout_seconds,
-            max_retries=settings.market.max_retries,
-            max_pools=settings.market.max_pools_per_chain,
-        )
         adapter = EvmChainAdapter(
             name,
             chain.rpc_http,
             settings.market.proxy_url,
             settings.market.http_timeout_seconds,
         )
+        discovery: PoolDiscovery = GeckoTerminalSource(
+            network_id,
+            settings.market.proxy_url,
+            timeout_seconds=settings.market.http_timeout_seconds,
+            max_retries=settings.market.max_retries,
+            max_pools=settings.market.max_pools_per_chain,
+        )
+        native_discovery = build_native_discovery(settings, adapter) if name == "bnb" else None
+        if native_discovery is not None:
+            discovery = CompositePoolDiscovery([native_discovery, discovery])
         market_collector = EvmMarketCollector(
             adapter,
             expected_chain_id=chain.chain_id,
             max_log_block_span=settings.market.max_log_block_span,
             max_pools=settings.market.max_pools_per_chain,
         )
-        source = LiveMarketSource(discovery, market_collector, MarketFusion())
+        external_source = None
+        if settings.external.enabled:
+            external_source = GmgnCalloutSource(
+                ak=os.getenv(settings.external.gmgn_ak_env),
+                sk=os.getenv(settings.external.gmgn_sk_env),
+                proxy_url=settings.market.proxy_url,
+                base_url=settings.external.gmgn_base_url,
+                timeout_seconds=settings.market.http_timeout_seconds,
+                max_retries=settings.market.max_retries,
+                max_tokens=settings.external.max_tokens_per_cycle,
+            )
+        source = LiveMarketSource(
+            discovery,
+            market_collector,
+            MarketFusion(),
+            external_source=external_source,
+        )
         return Collector(name, source.collect, repository, empty_status="observation_only")
 
     async def unavailable_source() -> Iterable[MarketEvent]:
         raise ConnectionError(f"{name}: RPC is not configured")
 
     return Collector(name, unavailable_source, repository, empty_status="observation_only")
+
+
+def build_native_discovery(
+    settings: Settings, adapter: EvmChainAdapter
+) -> BscPoolDiscovery | None:
+    if not settings.native_discovery.enabled:
+        return None
+    specs = [
+        ProtocolSpec(
+            name=name,
+            contract_address=protocol.contract_address,
+            event_kind=protocol.event_kind,
+            dex_id=protocol.dex_id,
+            enabled=protocol.enabled and protocol.chain == "bnb",
+        )
+        for name, protocol in settings.native_discovery.protocols.items()
+        if protocol.contract_address is not None
+    ]
+    if not specs:
+        return None
+    return BscPoolDiscovery(
+        adapter,
+        specs,
+        initial_backfill_blocks=settings.native_discovery.initial_backfill_blocks,
+        max_log_block_span=settings.native_discovery.max_log_block_span,
+        max_pools_per_protocol=settings.native_discovery.max_pools_per_protocol,
+        stale_cache_seconds=settings.native_discovery.stale_cache_seconds,
+    )
 
 
 def _unreachable_quote() -> Quote:

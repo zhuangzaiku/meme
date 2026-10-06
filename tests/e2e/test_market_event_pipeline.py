@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import cast
 
 import pytest
 
+from app.chains.evm import EvmChainAdapter
+from app.config import load_settings
 from app.data.collectors import Collector
 from app.data.events import Swap
 from app.data.sources.fusion import MarketFusion
 from app.data.sources.models import PoolCandidate, SourceHealth
 from app.data.sources.pipeline import LiveMarketSource
 from app.execution.paper_broker import PaperBroker
+from app.main import build_native_discovery
 from app.runtime import PaperRuntime
 from app.storage.repository import EventRepository
 
@@ -27,6 +32,15 @@ def candidate(chain: str, network_id: str, pool: str) -> PoolCandidate:
         base_is_token0=True,
         observed_at=now,
     )
+
+
+def test_bnb_builds_native_discovery_when_enabled(tmp_path: Path) -> None:
+    settings = load_settings(tmp_path / "missing.yaml")
+
+    source = build_native_discovery(settings, cast(EvmChainAdapter, object()))
+
+    assert source is not None
+    assert {spec.name for spec in source.specs} == {"pancakeswap_v2", "pancakeswap_v3"}
 
 
 class FakeDiscovery:
