@@ -14,8 +14,9 @@ from app.data.events import Swap
 from app.data.sources.fusion import MarketFusion
 from app.data.sources.models import PoolCandidate, SourceHealth
 from app.data.sources.pipeline import LiveMarketSource
+from app.data.sources.solana_market import SolanaMarketCollector
 from app.execution.paper_broker import PaperBroker
-from app.main import build_native_discovery
+from app.main import build_market_source, build_native_discovery
 from app.runtime import PaperRuntime
 from app.storage.repository import EventRepository
 
@@ -41,6 +42,18 @@ def test_bnb_builds_native_discovery_when_enabled(tmp_path: Path) -> None:
 
     assert source is not None
     assert {spec.name for spec in source.specs} == {"pancakeswap_v2", "pancakeswap_v3"}
+
+
+def test_sol_builds_a_solana_collector(tmp_path: Path) -> None:
+    settings = load_settings(tmp_path / "missing.yaml")
+    repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
+
+    collector = build_market_source(settings, "sol", repository)
+
+    assert collector.source_name == "sol"
+    assert hasattr(collector.event_source, "__self__")
+    live_source = collector.event_source.__self__
+    assert isinstance(live_source.collector, SolanaMarketCollector)
 
 
 class FakeDiscovery:
@@ -85,7 +98,7 @@ async def test_runtime_collects_independent_chains_concurrently(tmp_path) -> Non
 
     collectors = {
         name: Collector(name, lambda name=name: source(name), repository)
-        for name in ("bnb", "robinhood")
+    for name in ("bnb", "robinhood", "sol")
     }
     runtime = PaperRuntime(
         collectors,
@@ -97,7 +110,7 @@ async def test_runtime_collects_independent_chains_concurrently(tmp_path) -> Non
     report = await asyncio.wait_for(runtime.run_once(), timeout=0.2)
 
     assert report.events_seen == 0
-    assert set(report.health) == {"bnb", "robinhood"}
+    assert set(report.health) == {"bnb", "robinhood", "sol"}
 
 
 @pytest.mark.asyncio
@@ -158,7 +171,7 @@ async def test_run_forever_accepts_collection_timeout_separate_from_interval(tmp
 @pytest.mark.asyncio
 async def test_run_forever_polls_chains_at_independent_intervals(tmp_path) -> None:
     repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
-    counts = {"bnb": 0, "robinhood": 0}
+    counts = {"bnb": 0, "robinhood": 0, "sol": 0}
 
     async def source(name: str) -> list[Swap]:
         counts[name] += 1
@@ -184,13 +197,40 @@ async def test_run_forever_polls_chains_at_independent_intervals(tmp_path) -> No
 
     await runtime.run_forever(
         interval_seconds=0.01,
-        poll_intervals={"bnb": 0.02, "robinhood": 0.05},
-        collection_timeouts={"bnb": 0.01, "robinhood": 0.01},
+        poll_intervals={"bnb": 0.02, "robinhood": 0.05, "sol": 0.03},
+        collection_timeouts={"bnb": 0.01, "robinhood": 0.01, "sol": 0.01},
         stop_event=stop_event,
         on_report=on_report,
     )
 
     assert counts["bnb"] > counts["robinhood"]
+    assert counts["sol"] > 0
+
+
+@pytest.mark.asyncio
+async def test_solana_degraded_does_not_degrade_bnb(tmp_path: Path) -> None:
+    repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
+
+    async def empty_source() -> list[Swap]:
+        return []
+
+    async def failing_source() -> list[Swap]:
+        raise ConnectionError("solana unavailable")
+
+    runtime = PaperRuntime(
+        {
+            "bnb": Collector("bnb", empty_source, repository, empty_status="observation_only"),
+            "sol": Collector("sol", failing_source, repository),
+        },
+        PaperBroker(lambda _: None, initial_cash=100_000),
+        repository=repository,
+        initial_cash=100_000,
+    )
+
+    report = await runtime.run_once()
+
+    assert report.health["sol"].status == "degraded"
+    assert report.health["bnb"].status == "observation_only"
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,7 @@ from app.api.routes import ControlState, create_router
 from app.api.websocket import create_websocket_router
 from app.chains.base import Quote
 from app.chains.evm import EvmChainAdapter
+from app.chains.solana import SolanaRpcAdapter
 from app.config import MarketChainSettings, Settings, load_settings
 from app.data.collectors import Collector
 from app.data.events import MarketEvent
@@ -23,6 +24,7 @@ from app.data.sources.fusion import MarketFusion
 from app.data.sources.geckoterminal import GeckoTerminalSource
 from app.data.sources.gmgn import GmgnCalloutSource
 from app.data.sources.pipeline import LiveMarketSource, PoolDiscovery
+from app.data.sources.solana_market import SolanaMarketCollector
 from app.execution.paper_broker import PaperBroker
 from app.runtime import PaperRuntime, RuntimeReport
 from app.storage.repository import EventRepository
@@ -74,9 +76,10 @@ def main() -> None:
     mode = args.mode or settings.execution_mode
     if args.check_connectors:
         for name, chain in settings.chains.items():
-            status = (
-                "configured" if chain.rpc_http and chain.chain_id is not None else "unavailable"
+            configured = bool(chain.rpc_http) and (
+                chain.rpc_kind == "solana" or chain.chain_id is not None
             )
+            status = "configured" if configured else "unavailable"
             print(f"{name}: {status}")
         return
     if args.dry_run and mode == "approval":
@@ -180,6 +183,34 @@ def build_market_source(
 ) -> Collector:
     chain = settings.chains[name]
     network_id = "bsc" if name == "bnb" else name
+    if chain.rpc_kind == "solana" and chain.rpc_http:
+        chain_market = settings.market.per_chain.get(
+            name,
+            MarketChainSettings(
+                poll_interval_seconds=10.0,
+                collection_timeout_seconds=20.0,
+            ),
+        )
+        discovery = GeckoTerminalSource(
+            "solana",
+            settings.market.proxy_url,
+            timeout_seconds=settings.market.http_timeout_seconds,
+            max_retries=settings.market.max_retries,
+            max_pools=3,
+        )
+        rpc = SolanaRpcAdapter(
+            chain.rpc_http,
+            settings.market.proxy_url,
+            timeout_seconds=chain_market.collection_timeout_seconds,
+            max_retries=settings.market.max_retries,
+        )
+        market_collector = SolanaMarketCollector(
+            rpc,
+            max_pools=3,
+            max_signatures_per_pool=20,
+        )
+        source = LiveMarketSource(discovery, market_collector, MarketFusion())
+        return Collector(name, source.collect, repository, empty_status="observation_only")
     if chain.rpc_http and chain.chain_id is not None:
         adapter = EvmChainAdapter(
             name,
