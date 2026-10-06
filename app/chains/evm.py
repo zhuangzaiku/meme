@@ -9,11 +9,12 @@ from app.chains.base import ChainEvent, OrderIntent, Quote, SimulationResult
 
 
 class EvmChainAdapter:
-    def __init__(self, chain: str, rpc_http: str | None) -> None:
+    def __init__(self, chain: str, rpc_http: str | None, proxy_url: str | None = None) -> None:
         if not rpc_http:
             raise ValueError(f"RPC endpoint is not configured for {chain}")
         self.chain = chain
-        self.web3 = AsyncWeb3(AsyncHTTPProvider(rpc_http))
+        request_kwargs = {"proxy": proxy_url} if proxy_url else None
+        self.web3 = AsyncWeb3(AsyncHTTPProvider(rpc_http, request_kwargs=request_kwargs))
 
     async def get_latest_block(self) -> int:
         return await self.web3.eth.block_number

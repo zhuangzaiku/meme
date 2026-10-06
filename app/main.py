@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from fastapi import FastAPI
@@ -16,6 +16,10 @@ from app.chains.evm import EvmChainAdapter
 from app.config import Settings, load_settings
 from app.data.collectors import Collector
 from app.data.events import MarketEvent
+from app.data.sources.evm_market import EvmMarketCollector
+from app.data.sources.fusion import MarketFusion
+from app.data.sources.geckoterminal import GeckoTerminalSource
+from app.data.sources.pipeline import LiveMarketSource
 from app.execution.paper_broker import PaperBroker
 from app.runtime import PaperRuntime, RuntimeReport
 from app.storage.repository import EventRepository
@@ -105,12 +109,7 @@ async def run_paper(
     initial_cash = 100_000.0
     broker = PaperBroker(lambda _: _unreachable_quote(), initial_cash=initial_cash)
     collectors = {
-        name: Collector(
-            name,
-            _rpc_heartbeat_source(name, chain.rpc_http, chain.chain_id),
-            repository,
-            empty_status="observation_only",
-        )
+        name: build_market_source(settings, name, repository)
         for name, chain in settings.chains.items()
     }
     runtime = PaperRuntime.from_risk_settings(
@@ -158,31 +157,32 @@ async def run_paper(
         print("meme-agent stopped")
 
 
-def _rpc_heartbeat_source(
-    name: str, rpc_http: str | None, expected_chain_id: int | None
-) -> Callable[[], Awaitable[Iterable[MarketEvent]]]:
-    if rpc_http:
-        adapter = EvmChainAdapter(name, rpc_http)
-
-        async def source() -> Iterable[MarketEvent]:
-            try:
-                observed_chain_id = await adapter.get_chain_id()
-                if expected_chain_id is None or observed_chain_id != expected_chain_id:
-                    raise ConnectionError(
-                        f"{name}: chain id mismatch, expected {expected_chain_id}, "
-                        f"got {observed_chain_id}"
-                    )
-                await adapter.get_latest_block()
-                return []
-            finally:
-                await adapter.web3.provider.disconnect()
-
-        return source
+def build_market_source(
+    settings: Settings, name: str, repository: EventRepository
+) -> Collector:
+    chain = settings.chains[name]
+    network_id = "bsc" if name == "bnb" else name
+    if chain.rpc_http and chain.chain_id is not None:
+        discovery = GeckoTerminalSource(
+            network_id,
+            settings.market.proxy_url,
+            timeout_seconds=settings.market.http_timeout_seconds,
+            max_retries=settings.market.max_retries,
+            max_pools=settings.market.max_pools_per_chain,
+        )
+        adapter = EvmChainAdapter(name, chain.rpc_http, settings.market.proxy_url)
+        market_collector = EvmMarketCollector(
+            adapter,
+            expected_chain_id=chain.chain_id,
+            max_log_block_span=settings.market.max_log_block_span,
+        )
+        source = LiveMarketSource(discovery, market_collector, MarketFusion())
+        return Collector(name, source.collect, repository, empty_status="observation_only")
 
     async def unavailable_source() -> Iterable[MarketEvent]:
         raise ConnectionError(f"{name}: RPC is not configured")
 
-    return unavailable_source
+    return Collector(name, unavailable_source, repository, empty_status="observation_only")
 
 
 def _unreachable_quote() -> Quote:
