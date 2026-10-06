@@ -15,7 +15,21 @@ python3.12 -m venv .venv
 ```
 
 Use `BNB_RPC_URL` and `ROBINHOOD_RPC_URL` for read-only connector endpoints.
-Do not place private keys in this repository.
+Market discovery uses the local proxy `MARKET_PROXY_URL` and defaults to
+`http://127.0.0.1:7890`. Do not place private keys in this repository.
+
+Run a bounded, read-only market-source smoke check before starting paper mode:
+
+```bash
+MARKET_PROXY_URL=http://127.0.0.1:7890 \
+.venv/bin/python -m app.data.sources.smoke \
+  --chains bnb,robinhood --max-pools 1 --max-log-span 25
+```
+
+The smoke check validates configured chain IDs, discovers pools, checks pool
+contracts, and reads a bounded log window. `observation_only` is expected when
+the source is reachable but no verified event was found in that window; it is
+not a permission to trade.
 
 Start the paper runtime with no signer loaded:
 
@@ -23,9 +37,12 @@ Start the paper runtime with no signer loaded:
 .venv/bin/python -m app.main --mode paper
 ```
 
-For a bounded smoke run, use `--once` or `--duration 60`. The runtime only
-trades after authoritative normalized events are available. With no RPC/DEX
-event source configured it remains `degraded` and submits no paper orders.
+The paper runtime checks the market sources every 5 seconds by default and
+reports status with the same cadence. For a bounded run, use `--once` or
+`--duration 60`. It only creates paper orders after authoritative normalized
+events and the existing security/risk gates are available. A source that is
+reachable but has no verified event remains `observation_only` and submits no
+entry order.
 
 ## Safe operation
 

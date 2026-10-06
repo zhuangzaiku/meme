@@ -170,7 +170,12 @@ def build_market_source(
             max_retries=settings.market.max_retries,
             max_pools=settings.market.max_pools_per_chain,
         )
-        adapter = EvmChainAdapter(name, chain.rpc_http, settings.market.proxy_url)
+        adapter = EvmChainAdapter(
+            name,
+            chain.rpc_http,
+            settings.market.proxy_url,
+            settings.market.http_timeout_seconds,
+        )
         market_collector = EvmMarketCollector(
             adapter,
             expected_chain_id=chain.chain_id,

@@ -4,17 +4,35 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from web3 import AsyncHTTPProvider, AsyncWeb3
+from web3.providers.rpc.utils import ExceptionRetryConfiguration
 
 from app.chains.base import ChainEvent, OrderIntent, Quote, SimulationResult
 
 
 class EvmChainAdapter:
-    def __init__(self, chain: str, rpc_http: str | None, proxy_url: str | None = None) -> None:
+    def __init__(
+        self,
+        chain: str,
+        rpc_http: str | None,
+        proxy_url: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> None:
         if not rpc_http:
             raise ValueError(f"RPC endpoint is not configured for {chain}")
         self.chain = chain
-        request_kwargs = {"proxy": proxy_url} if proxy_url else None
-        self.web3 = AsyncWeb3(AsyncHTTPProvider(rpc_http, request_kwargs=request_kwargs))
+        request_kwargs: dict[str, object] = {}
+        if proxy_url:
+            request_kwargs["proxy"] = proxy_url
+        if timeout_seconds is not None:
+            request_kwargs["timeout"] = timeout_seconds
+        retry_configuration = ExceptionRetryConfiguration(errors=(), retries=1)
+        self.web3 = AsyncWeb3(
+            AsyncHTTPProvider(
+                rpc_http,
+                request_kwargs=request_kwargs,
+                exception_retry_configuration=retry_configuration,
+            )
+        )
 
     async def get_latest_block(self) -> int:
         return await self.web3.eth.block_number
