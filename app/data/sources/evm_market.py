@@ -51,14 +51,20 @@ class EvmMarketCollector:
         adapter: MarketRpc,
         expected_chain_id: int,
         max_log_block_span: int = 1000,
+        max_pools: int | None = None,
     ) -> None:
         if max_log_block_span < 1:
             raise ValueError("max_log_block_span must be positive")
+        if max_pools is not None and max_pools < 1:
+            raise ValueError("max_pools must be positive")
         self.adapter = adapter
         self.expected_chain_id = expected_chain_id
         self.max_log_block_span = max_log_block_span
+        self.max_pools = max_pools
         self._cursors: dict[tuple[str, str], int] = {}
         self._seen_event_ids: set[str] = set()
+        self._validated_pools: dict[tuple[str, str], bool] = {}
+        self._base_is_token0: dict[tuple[str, str], bool] = {}
 
     async def collect(self, candidates: list[PoolCandidate]) -> list[MarketEvent]:
         chain_id = await self.adapter.get_chain_id()
@@ -68,16 +74,26 @@ class EvmMarketCollector:
             )
         latest_block = await self.adapter.get_latest_block()
         collected: list[MarketEvent] = []
-        for candidate in candidates:
+        selected_candidates = (
+            candidates[: self.max_pools] if self.max_pools is not None else candidates
+        )
+        for candidate in selected_candidates:
             key = (candidate.chain, candidate.pool_address)
-            code = await self.adapter.get_code(candidate.pool_address)
-            if not code or code in {"0x", "0x0"}:
-                continue
-            if candidate.base_is_token0 is None:
+            if not self._validated_pools.get(key, False):
+                code = await self.adapter.get_code(candidate.pool_address)
+                if not code or code in {"0x", "0x0"}:
+                    self._validated_pools[key] = False
+                    continue
+                self._validated_pools[key] = True
+            if candidate.base_is_token0 is None and key not in self._base_is_token0:
                 token0 = await self.adapter.get_pool_token0(candidate.pool_address)
+                self._base_is_token0[key] = token0.lower() == candidate.base_token
+            if key in self._base_is_token0:
                 candidate = candidate.model_copy(
-                    update={"base_is_token0": token0.lower() == candidate.base_token}
+                    update={"base_is_token0": self._base_is_token0[key]}
                 )
+            elif candidate.base_is_token0 is None:
+                continue
             initial_cursor = max(0, latest_block - self.max_log_block_span)
             cursor = self._cursors.setdefault(key, initial_cursor)
             next_events: list[MarketEvent] = []

@@ -69,6 +69,7 @@ async def run_market_smoke(
                 adapter,
                 expected_chain_id=chain.chain_id,
                 max_log_block_span=max_log_block_span or settings.market.max_log_block_span,
+                max_pools=max_pools or settings.market.max_pools_per_chain,
             )
             events = await collector.collect(candidates)
             status: ConnectorStatus = "ready" if events else "observation_only"

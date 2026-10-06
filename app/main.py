@@ -180,6 +180,7 @@ def build_market_source(
             adapter,
             expected_chain_id=chain.chain_id,
             max_log_block_span=settings.market.max_log_block_span,
+            max_pools=settings.market.max_pools_per_chain,
         )
         source = LiveMarketSource(discovery, market_collector, MarketFusion())
         return Collector(name, source.collect, repository, empty_status="observation_only")

@@ -30,6 +30,8 @@ class FakeRpc:
         self.latest_block = latest_block
         self.fail_from = fail_from
         self.calls: list[tuple[int, int]] = []
+        self.code_calls: list[str] = []
+        self.token0_calls: list[str] = []
 
     async def get_chain_id(self) -> int:
         return 56
@@ -38,9 +40,11 @@ class FakeRpc:
         return self.latest_block
 
     async def get_code(self, address: str) -> str:
+        self.code_calls.append(address)
         return "0x1234"
 
     async def get_pool_token0(self, address: str) -> str:
+        self.token0_calls.append(address)
         return candidate().base_token
 
     async def get_logs(
@@ -85,3 +89,38 @@ async def test_collector_does_not_advance_cursor_after_failed_range() -> None:
 
     assert events == []
     assert collector.cursor("bnb", candidate().pool_address) == 70
+
+
+@pytest.mark.asyncio
+async def test_collector_caches_pool_validation_and_reads_only_new_blocks() -> None:
+    rpc = FakeRpc(latest_block=120)
+    pool = candidate().model_copy(update={"base_is_token0": None})
+    collector = EvmMarketCollector(rpc, expected_chain_id=56, max_log_block_span=50)
+
+    await collector.collect([pool])
+    rpc.latest_block = 125
+    await collector.collect([pool])
+
+    assert rpc.calls == [(71, 120), (121, 125)]
+    assert rpc.code_calls == [pool.pool_address]
+    assert rpc.token0_calls == [pool.pool_address]
+
+
+@pytest.mark.asyncio
+async def test_collector_limits_pools_per_cycle() -> None:
+    rpc = FakeRpc(latest_block=120)
+    first = candidate()
+    second = first.model_copy(
+        update={"pool_address": "0x00000000000000000000000000000000000000dd"}
+    )
+    collector = EvmMarketCollector(
+        rpc,
+        expected_chain_id=56,
+        max_log_block_span=50,
+        max_pools=1,
+    )
+
+    await collector.collect([first, second])
+
+    assert rpc.code_calls == [first.pool_address]
+    assert rpc.calls == [(71, 120)]
