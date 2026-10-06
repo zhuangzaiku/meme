@@ -16,6 +16,7 @@ class MarketEvent(BaseModel):
     source_event_id: str | None = None
     block_number: int | None = None
     transaction_hash: str | None = None
+    pool_address: str | None = None
 
     @field_validator("timestamp")
     @classmethod

@@ -84,6 +84,7 @@ def decode_v2_swap(
         source_event_id=event_id(log, candidate.chain),
         block_number=_as_int(log.get("blockNumber")),
         transaction_hash=_as_hex(log.get("transactionHash")),
+        pool_address=candidate.pool_address,
     )
 
 
@@ -121,6 +122,7 @@ def decode_v3_swap(
         source_event_id=event_id(log, candidate.chain),
         block_number=_as_int(log.get("blockNumber")),
         transaction_hash=_as_hex(log.get("transactionHash")),
+        pool_address=candidate.pool_address,
     )
 
 
@@ -147,6 +149,7 @@ def decode_sync_or_liquidity(
         source_event_id=event_id(log, candidate.chain),
         block_number=_as_int(log.get("blockNumber")),
         transaction_hash=_as_hex(log.get("transactionHash")),
+        pool_address=candidate.pool_address,
     )
 
 
