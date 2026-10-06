@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, TypeVar
@@ -107,9 +107,20 @@ class PaperRuntime:
             ),
         )
 
-    async def run_once(self, collection_timeout_seconds: float | None = None) -> RuntimeReport:
+    async def run_once(
+        self,
+        collection_timeout_seconds: float | None = None,
+        *,
+        collector_names: Iterable[str] | None = None,
+        collection_timeouts: Mapping[str, float] | None = None,
+    ) -> RuntimeReport:
         if collection_timeout_seconds is not None and collection_timeout_seconds <= 0:
             raise ValueError("collection timeout must be positive")
+        selected_names = list(collector_names or self.collectors)
+        unknown_names = set(selected_names) - self.collectors.keys()
+        if unknown_names:
+            raise ValueError(f"unknown collectors: {sorted(unknown_names)}")
+        selected_collectors = {name: self.collectors[name] for name in selected_names}
         started_at = datetime.now(UTC)
         collected: list[MarketEvent] = []
         collection_results = await asyncio.gather(
@@ -117,39 +128,30 @@ class PaperRuntime:
                 self._collect_from_collector(
                     name,
                     collector,
-                    collection_timeout_seconds,
+                    self._timeout_for(
+                        name,
+                        collection_timeout_seconds,
+                        collection_timeouts,
+                    ),
                 )
-                for name, collector in self.collectors.items()
+                for name, collector in selected_collectors.items()
             )
         )
-        for collector, events in zip(self.collectors.values(), collection_results, strict=True):
+        for events in collection_results:
             collected.extend(events)
-            for event in events:
-                key = (event.chain, event.token)
-                self.events.setdefault(key, []).append(event)
-                if isinstance(event, PriceTick):
-                    self._latest_prices[key] = event.price
+        self._record_events(collected)
+        return self._make_report(started_at, len(collected))
 
-        decisions: list[Decision] = []
-        results: list[OrderResult] = []
-        for key in sorted(self.events):
-            snapshot = self._build_snapshot(key)
-            if snapshot is None:
-                continue
-            decision = self.strategy.evaluate(snapshot)
-            decisions.append(decision)
-            result = self._execute_decision(key, snapshot, decision)
-            if result is not None:
-                results.append(result)
-
-        return RuntimeReport(
-            started_at=started_at,
-            finished_at=datetime.now(UTC),
-            events_seen=len(collected),
-            decisions=decisions,
-            order_results=results,
-            health={name: collector.health for name, collector in self.collectors.items()},
-        )
+    def _timeout_for(
+        self,
+        name: str,
+        fallback: float | None,
+        overrides: Mapping[str, float] | None,
+    ) -> float | None:
+        timeout = overrides.get(name) if overrides is not None and name in overrides else fallback
+        if timeout is not None and timeout <= 0:
+            raise ValueError("collection timeout must be positive")
+        return timeout
 
     async def _collect_from_collector(
         self,
@@ -174,37 +176,106 @@ class PaperRuntime:
         *,
         interval_seconds: float = 5.0,
         collection_timeout_seconds: float | None = None,
+        poll_intervals: Mapping[str, float] | None = None,
+        collection_timeouts: Mapping[str, float] | None = None,
         stop_event: asyncio.Event | None = None,
         on_report: Callable[[RuntimeReport], Awaitable[None] | None] | None = None,
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
-        collection_timeout = (
-            interval_seconds
-            if collection_timeout_seconds is None
-            else collection_timeout_seconds
-        )
-        if collection_timeout <= 0:
-            raise ValueError("collection timeout must be positive")
+        names = list(self.collectors)
+        intervals = {
+            name: poll_intervals.get(name, interval_seconds)
+            if poll_intervals is not None
+            else interval_seconds
+            for name in names
+        }
+        for name, interval in intervals.items():
+            if interval <= 0:
+                raise ValueError(f"poll interval for {name} must be positive")
         loop = asyncio.get_running_loop()
-        next_run_at = loop.time()
-        while stop_event is None or not stop_event.is_set():
-            report = await self.run_once(collection_timeout_seconds=collection_timeout)
-            if on_report is not None:
-                callback_result = on_report(report)
-                if callback_result is not None:
-                    await callback_result
-            next_run_at += interval_seconds
-            delay = next_run_at - loop.time()
-            if delay <= 0:
+        next_due = {name: loop.time() for name in names}
+        next_report_at = loop.time()
+        tasks: dict[asyncio.Task[list[MarketEvent]], str] = {}
+        try:
+            while stop_event is None or not stop_event.is_set():
+                now = loop.time()
+                for name, collector in self.collectors.items():
+                    if now >= next_due[name] and name not in tasks.values():
+                        timeout = self._timeout_for(
+                            name,
+                            collection_timeout_seconds,
+                            collection_timeouts,
+                        )
+                        task = asyncio.create_task(
+                            self._collect_from_collector(name, collector, timeout)
+                        )
+                        tasks[task] = name
+                        next_due[name] = now + intervals[name]
+
+                next_wake = min(next_due.values(), default=next_report_at)
+                next_wake = min(next_wake, next_report_at)
+                delay = max(0.0, next_wake - loop.time())
+                if tasks:
+                    done, _ = await asyncio.wait(
+                        tasks,
+                        timeout=delay,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                else:
+                    await asyncio.sleep(delay)
+                    done = set()
+
+                events_seen = 0
+                for task in done:
+                    name = tasks.pop(task)
+                    events = task.result()
+                    events_seen += len(events)
+                    self._record_events(events)
+                    next_due[name] = loop.time() + intervals[name]
+
+                now = loop.time()
+                if now >= next_report_at:
+                    report = self._make_report(datetime.now(UTC), events_seen)
+                    if on_report is not None:
+                        callback_result = on_report(report)
+                        if callback_result is not None:
+                            await callback_result
+                    while next_report_at <= now:
+                        next_report_at += interval_seconds
+        finally:
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _record_events(self, events: Iterable[MarketEvent]) -> None:
+        for event in events:
+            key = (event.chain, event.token)
+            self.events.setdefault(key, []).append(event)
+            if isinstance(event, PriceTick):
+                self._latest_prices[key] = event.price
+
+    def _make_report(self, started_at: datetime, events_seen: int) -> RuntimeReport:
+        decisions: list[Decision] = []
+        results: list[OrderResult] = []
+        for key in sorted(self.events):
+            snapshot = self._build_snapshot(key)
+            if snapshot is None:
                 continue
-            if stop_event is None:
-                await asyncio.sleep(delay)
-                continue
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=delay)
-            except TimeoutError:
-                pass
+            decision = self.strategy.evaluate(snapshot)
+            decisions.append(decision)
+            result = self._execute_decision(key, snapshot, decision)
+            if result is not None:
+                results.append(result)
+        return RuntimeReport(
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            events_seen=events_seen,
+            decisions=decisions,
+            order_results=results,
+            health={name: collector.health for name, collector in self.collectors.items()},
+        )
 
     def _build_snapshot(self, key: tuple[str, str]) -> StrategySnapshot | None:
         events = self.events[key]

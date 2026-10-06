@@ -10,6 +10,10 @@ def test_default_mode_is_paper(tmp_path: Path) -> None:
     assert settings.market.proxy_url == "http://127.0.0.1:7890"
     assert settings.market.discovery_interval_seconds == 60
     assert settings.market.collection_timeout_seconds == 10.0
+    assert settings.market.per_chain["bnb"].poll_interval_seconds == 5.0
+    assert settings.market.per_chain["bnb"].collection_timeout_seconds == 10.0
+    assert settings.market.per_chain["robinhood"].poll_interval_seconds == 15.0
+    assert settings.market.per_chain["robinhood"].collection_timeout_seconds == 30.0
 
 
 def test_chain_endpoints_are_loaded_from_environment(monkeypatch, tmp_path: Path) -> None:

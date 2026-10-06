@@ -128,7 +128,8 @@ async def test_run_forever_accepts_collection_timeout_separate_from_interval(tmp
 
     async def on_report(report) -> None:
         reports.append(report)
-        stop_event.set()
+        if report.health["bnb"].status != "unavailable":
+            stop_event.set()
 
     await runtime.run_forever(
         interval_seconds=0.1,
@@ -137,7 +138,45 @@ async def test_run_forever_accepts_collection_timeout_separate_from_interval(tmp
         on_report=on_report,
     )
 
-    assert reports[0].health["bnb"].status == "degraded"
+    assert reports[-1].health["bnb"].status == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_run_forever_polls_chains_at_independent_intervals(tmp_path) -> None:
+    repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
+    counts = {"bnb": 0, "robinhood": 0}
+
+    async def source(name: str) -> list[Swap]:
+        counts[name] += 1
+        return []
+
+    runtime = PaperRuntime(
+        {
+            name: Collector(name, lambda name=name: source(name), repository)
+            for name in counts
+        },
+        PaperBroker(lambda _: None, initial_cash=100_000),
+        repository=repository,
+        initial_cash=100_000,
+    )
+    stop_event = asyncio.Event()
+    report_count = 0
+
+    async def on_report(report) -> None:
+        nonlocal report_count
+        report_count += 1
+        if report_count >= 8:
+            stop_event.set()
+
+    await runtime.run_forever(
+        interval_seconds=0.01,
+        poll_intervals={"bnb": 0.02, "robinhood": 0.05},
+        collection_timeouts={"bnb": 0.01, "robinhood": 0.01},
+        stop_event=stop_event,
+        on_report=on_report,
+    )
+
+    assert counts["bnb"] > counts["robinhood"]
 
 
 @pytest.mark.asyncio

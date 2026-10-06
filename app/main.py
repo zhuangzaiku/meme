@@ -13,7 +13,7 @@ from app.api.routes import ControlState, create_router
 from app.api.websocket import create_websocket_router
 from app.chains.base import Quote
 from app.chains.evm import EvmChainAdapter
-from app.config import Settings, load_settings
+from app.config import MarketChainSettings, Settings, load_settings
 from app.data.collectors import Collector
 from app.data.events import MarketEvent
 from app.data.sources.evm_market import EvmMarketCollector
@@ -124,6 +124,18 @@ async def run_paper(
         if report_interval_seconds is not None
         else interval_seconds
     )
+    poll_intervals: dict[str, float] = {}
+    collection_timeouts: dict[str, float] = {}
+    for name in collectors:
+        chain_market = settings.market.per_chain.get(
+            name,
+            MarketChainSettings(
+                poll_interval_seconds=interval_seconds,
+                collection_timeout_seconds=settings.market.collection_timeout_seconds,
+            ),
+        )
+        poll_intervals[name] = chain_market.poll_interval_seconds
+        collection_timeouts[name] = chain_market.collection_timeout_seconds
 
     async def report(report: RuntimeReport) -> None:
         if not once and not report_gate.should_report(asyncio.get_running_loop().time()):
@@ -150,6 +162,8 @@ async def run_paper(
         await runtime.run_forever(
             interval_seconds=interval_seconds,
             collection_timeout_seconds=settings.market.collection_timeout_seconds,
+            poll_intervals=poll_intervals,
+            collection_timeouts=collection_timeouts,
             stop_event=stop_event,
             on_report=report,
         )

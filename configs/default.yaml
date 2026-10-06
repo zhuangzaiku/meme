@@ -20,6 +20,13 @@ market:
   http_timeout_seconds: 10
   collection_timeout_seconds: 10
   max_retries: 3
+  per_chain:
+    bnb:
+      poll_interval_seconds: 5
+      collection_timeout_seconds: 10
+    robinhood:
+      poll_interval_seconds: 15
+      collection_timeout_seconds: 30
 
 chains:
   bnb:

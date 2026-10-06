@@ -23,6 +23,11 @@ class RiskSettings(BaseModel):
     allow_averaging_down: bool = False
 
 
+class MarketChainSettings(BaseModel):
+    poll_interval_seconds: float = 5.0
+    collection_timeout_seconds: float = 10.0
+
+
 class MarketSourceSettings(BaseModel):
     proxy_url: str = "http://127.0.0.1:7890"
     discovery_interval_seconds: int = 60
@@ -31,6 +36,15 @@ class MarketSourceSettings(BaseModel):
     http_timeout_seconds: float = 10.0
     collection_timeout_seconds: float = 10.0
     max_retries: int = 3
+    per_chain: dict[str, MarketChainSettings] = Field(
+        default_factory=lambda: {
+            "bnb": MarketChainSettings(),
+            "robinhood": MarketChainSettings(
+                poll_interval_seconds=15.0,
+                collection_timeout_seconds=30.0,
+            ),
+        }
+    )
 
 
 class ChainSettings(BaseModel):
