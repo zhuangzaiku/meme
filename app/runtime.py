@@ -107,11 +107,22 @@ class PaperRuntime:
             ),
         )
 
-    async def run_once(self) -> RuntimeReport:
+    async def run_once(self, collection_timeout_seconds: float | None = None) -> RuntimeReport:
+        if collection_timeout_seconds is not None and collection_timeout_seconds <= 0:
+            raise ValueError("collection timeout must be positive")
         started_at = datetime.now(UTC)
         collected: list[MarketEvent] = []
-        for collector in self.collectors.values():
-            events = await collector.run_once()
+        collection_results = await asyncio.gather(
+            *(
+                self._collect_from_collector(
+                    name,
+                    collector,
+                    collection_timeout_seconds,
+                )
+                for name, collector in self.collectors.items()
+            )
+        )
+        for collector, events in zip(self.collectors.values(), collection_results, strict=True):
             collected.extend(events)
             for event in events:
                 key = (event.chain, event.token)
@@ -140,6 +151,24 @@ class PaperRuntime:
             health={name: collector.health for name, collector in self.collectors.items()},
         )
 
+    async def _collect_from_collector(
+        self,
+        name: str,
+        collector: Collector,
+        timeout_seconds: float | None,
+    ) -> list[MarketEvent]:
+        try:
+            if timeout_seconds is None:
+                return await collector.run_once()
+            return await asyncio.wait_for(collector.run_once(), timeout=timeout_seconds)
+        except TimeoutError:
+            collector.health = ConnectorHealth(
+                name,
+                "degraded",
+                error=f"collection timed out after {timeout_seconds:.2f}s",
+            )
+            return []
+
     async def run_forever(
         self,
         *,
@@ -149,19 +178,25 @@ class PaperRuntime:
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
+        loop = asyncio.get_running_loop()
+        next_run_at = loop.time()
         while stop_event is None or not stop_event.is_set():
-            report = await self.run_once()
+            report = await self.run_once(collection_timeout_seconds=interval_seconds)
             if on_report is not None:
                 callback_result = on_report(report)
                 if callback_result is not None:
                     await callback_result
+            next_run_at += interval_seconds
+            delay = next_run_at - loop.time()
+            if delay <= 0:
+                continue
             if stop_event is None:
-                await asyncio.sleep(interval_seconds)
-            else:
-                try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
-                except TimeoutError:
-                    pass
+                await asyncio.sleep(delay)
+                continue
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=delay)
+            except TimeoutError:
+                pass
 
     def _build_snapshot(self, key: tuple[str, str]) -> StrategySnapshot | None:
         events = self.events[key]

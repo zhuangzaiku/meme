@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 import pytest
@@ -55,6 +56,57 @@ class FakeMarketCollector:
                 source_event_id=f"{self.pool.chain}:0xabc:1",
             )
         ]
+
+
+@pytest.mark.asyncio
+async def test_runtime_collects_independent_chains_concurrently(tmp_path) -> None:
+    repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
+    started: set[str] = set()
+
+    async def source(name: str) -> list[Swap]:
+        started.add(name)
+        while len(started) < 2:
+            await asyncio.sleep(0)
+        return []
+
+    collectors = {
+        name: Collector(name, lambda name=name: source(name), repository)
+        for name in ("bnb", "robinhood")
+    }
+    runtime = PaperRuntime(
+        collectors,
+        PaperBroker(lambda _: None, initial_cash=100_000),
+        repository=repository,
+        initial_cash=100_000,
+    )
+
+    report = await asyncio.wait_for(runtime.run_once(), timeout=0.2)
+
+    assert report.events_seen == 0
+    assert set(report.health) == {"bnb", "robinhood"}
+
+
+@pytest.mark.asyncio
+async def test_runtime_marks_slow_source_degraded_after_timeout(tmp_path) -> None:
+    repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
+
+    async def slow_source() -> list[Swap]:
+        await asyncio.sleep(1)
+        return []
+
+    collector = Collector("bnb", slow_source, repository)
+    runtime = PaperRuntime(
+        {"bnb": collector},
+        PaperBroker(lambda _: None, initial_cash=100_000),
+        repository=repository,
+        initial_cash=100_000,
+    )
+
+    report = await runtime.run_once(collection_timeout_seconds=0.01)
+
+    assert report.events_seen == 0
+    assert report.health["bnb"].status == "degraded"
+    assert "timed out" in (report.health["bnb"].error or "")
 
 
 @pytest.mark.asyncio
