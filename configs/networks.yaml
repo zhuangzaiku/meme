@@ -1,0 +1,16 @@
+# Chain metadata registry. Endpoints are intentionally supplied through the
+# environment until an authoritative endpoint has been verified.
+bnb:
+  name: BNB Smart Chain
+  chain_id: 56
+  native_symbol: BNB
+  explorer: https://bscscan.com
+  rpc_env: BNB_RPC_URL
+
+robinhood:
+  name: Robinhood Chain
+  chain_id: null
+  native_symbol: null
+  explorer: null
+  rpc_env: ROBINHOOD_RPC_URL
+  status: unverified
