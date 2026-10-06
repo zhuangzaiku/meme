@@ -16,6 +16,19 @@ def test_default_mode_is_paper(tmp_path: Path) -> None:
     assert settings.market.per_chain["robinhood"].collection_timeout_seconds == 30.0
 
 
+def test_native_bsc_discovery_defaults_are_verified(tmp_path: Path) -> None:
+    settings = load_settings(tmp_path / "missing.yaml")
+    protocols = settings.native_discovery.protocols
+    assert settings.native_discovery.enabled is True
+    assert protocols["pancakeswap_v2"].contract_address == (
+        "0xca143ce32fe78f1f7019d7d551a6402fc5350c73"
+    )
+    assert protocols["pancakeswap_v3"].contract_address == (
+        "0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865"
+    )
+    assert "four_meme" not in protocols
+
+
 def test_chain_endpoints_are_loaded_from_environment(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("BNB_RPC_URL", "https://bnb.example")
     monkeypatch.setenv("ROBINHOOD_RPC_URL", "https://robinhood.example")

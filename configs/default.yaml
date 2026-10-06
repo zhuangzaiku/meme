@@ -28,6 +28,33 @@ market:
       poll_interval_seconds: 15
       collection_timeout_seconds: 30
 
+external:
+  enabled: true
+  gmgn_base_url: https://papi.gmgn.ai/callout/openapi/v1
+  gmgn_ak_env: GMGN_AK
+  gmgn_sk_env: GMGN_SK
+  max_tokens_per_cycle: 2
+
+native_discovery:
+  enabled: true
+  initial_backfill_blocks: 500
+  max_log_block_span: 1000
+  max_pools_per_protocol: 50
+  stale_cache_seconds: 300
+  protocols:
+    pancakeswap_v2:
+      enabled: true
+      chain: bnb
+      contract_address: "0xca143ce32fe78f1f7019d7d551a6402fc5350c73"
+      event_kind: v2_pair_created
+      dex_id: pancakeswap-v2
+    pancakeswap_v3:
+      enabled: true
+      chain: bnb
+      contract_address: "0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865"
+      event_kind: v3_pool_created
+      dex_id: pancakeswap-v3
+
 chains:
   bnb:
     name: BNB Smart Chain

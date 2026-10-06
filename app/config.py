@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from web3 import Web3
 
 ExecutionMode = Literal["paper", "approval", "auto"]
 
@@ -47,6 +48,62 @@ class MarketSourceSettings(BaseModel):
     )
 
 
+class ExternalSignalSettings(BaseModel):
+    enabled: bool = True
+    gmgn_base_url: str = "https://papi.gmgn.ai/callout/openapi/v1"
+    gmgn_ak_env: str = "GMGN_AK"
+    gmgn_sk_env: str = "GMGN_SK"
+    max_tokens_per_cycle: int = 2
+
+
+NativeEventKind = Literal["v2_pair_created", "v3_pool_created", "four_meme"]
+
+
+class NativeProtocolSettings(BaseModel):
+    enabled: bool = True
+    chain: str = "bnb"
+    contract_address: str | None = None
+    event_kind: NativeEventKind
+    dex_id: str
+
+    @field_validator("contract_address")
+    @classmethod
+    def validate_contract_address(cls, value: str | None) -> str | None:
+        if value is not None:
+            if not Web3.is_address(value):
+                raise ValueError("contract_address must be a valid EVM address")
+            return value.lower()
+        return None
+
+    @model_validator(mode="after")
+    def enabled_protocol_requires_address(self) -> NativeProtocolSettings:
+        if self.enabled and self.contract_address is None:
+            raise ValueError("enabled native protocol requires contract_address")
+        return self
+
+
+class NativeDiscoverySettings(BaseModel):
+    enabled: bool = True
+    initial_backfill_blocks: int = Field(default=500, gt=0)
+    max_log_block_span: int = Field(default=1000, gt=0)
+    max_pools_per_protocol: int = Field(default=50, gt=0)
+    stale_cache_seconds: int = Field(default=300, gt=0)
+    protocols: dict[str, NativeProtocolSettings] = Field(
+        default_factory=lambda: {
+            "pancakeswap_v2": NativeProtocolSettings(
+                contract_address="0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
+                event_kind="v2_pair_created",
+                dex_id="pancakeswap-v2",
+            ),
+            "pancakeswap_v3": NativeProtocolSettings(
+                contract_address="0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865",
+                event_kind="v3_pool_created",
+                dex_id="pancakeswap-v3",
+            ),
+        }
+    )
+
+
 class ChainSettings(BaseModel):
     name: str
     chain_id: int | None = None
@@ -61,6 +118,8 @@ class Settings(BaseModel):
     execution_mode: ExecutionMode = "paper"
     risk: RiskSettings = Field(default_factory=RiskSettings)
     market: MarketSourceSettings = Field(default_factory=MarketSourceSettings)
+    external: ExternalSignalSettings = Field(default_factory=ExternalSignalSettings)
+    native_discovery: NativeDiscoverySettings = Field(default_factory=NativeDiscoverySettings)
     chains: dict[str, ChainSettings]
 
 
