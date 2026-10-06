@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 
 import keyring
 from eth_account import Account
@@ -10,7 +10,7 @@ ExecutionMode = Literal["paper", "approval", "auto"]
 
 
 class WalletManager:
-    def __init__(self, keyring_backend=keyring, username: str = "private_key") -> None:
+    def __init__(self, keyring_backend: Any = keyring, username: str = "private_key") -> None:
         self.keyring = keyring_backend
         self.username = username
 
@@ -22,4 +22,4 @@ class WalletManager:
         private_key = self.keyring.get_password(f"meme-agent/{chain}", self.username)
         if not private_key:
             raise RuntimeError(f"no signer configured for {chain}")
-        return Account.from_key(private_key)
+        return cast(BaseAccount, Account.from_key(private_key))

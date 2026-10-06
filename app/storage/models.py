@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, DateTime, String, create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -19,10 +21,10 @@ class MarketEventRow(Base):
     event_type: Mapped[str] = mapped_column(String(128), index=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     source: Mapped[str] = mapped_column(String(128))
-    payload: Mapped[dict] = mapped_column(JSON)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
-def create_engine_for_url(database_url: str):
+def create_engine_for_url(database_url: str) -> Engine:
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     engine = create_engine(database_url, connect_args=connect_args)
     if database_url.startswith("sqlite"):

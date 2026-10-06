@@ -57,6 +57,19 @@ class ApprovalExecutor:
     def prepare(self, order: Order) -> ApprovalRequest:
         market = self.market_provider(order)
         decision = self.risk_engine.check(order, self.account_provider(), market)
+        score_value = order.metadata.get("score", 0.0)
+        evidence_value = order.metadata.get("evidence", [])
+        vetoes_value = order.metadata.get("vetoes", [])
+        evidence = (
+            [str(item) for item in evidence_value]
+            if isinstance(evidence_value, (list, tuple))
+            else []
+        )
+        vetoes = (
+            [str(item) for item in vetoes_value]
+            if isinstance(vetoes_value, (list, tuple))
+            else []
+        )
         request = ApprovalRequest(
             request_id=str(uuid4()),
             order=order,
@@ -67,9 +80,9 @@ class ApprovalExecutor:
             quote=market.price,
             max_slippage_percent=order.max_slippage_percent,
             estimated_gas=0,
-            score=float(order.metadata.get("score", 0.0)),
-            evidence=[str(item) for item in order.metadata.get("evidence", [])],
-            vetoes=[str(item) for item in order.metadata.get("vetoes", [])],
+            score=float(score_value) if isinstance(score_value, (int, float, str)) else 0.0,
+            evidence=evidence,
+            vetoes=vetoes,
             risk_decision=decision,
             expires_at=datetime.now(UTC) + timedelta(minutes=1),
         )

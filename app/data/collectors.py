@@ -18,14 +18,20 @@ def _parse_timestamp(value: object) -> datetime:
     raise ValueError("event timestamp must be an ISO string or datetime")
 
 
+def _as_float(value: object) -> float:
+    if isinstance(value, (float, int, str)):
+        return float(value)
+    raise ValueError("numeric event field is invalid")
+
+
 def normalize_swap(raw: Mapping[str, object]) -> Swap:
     return Swap(
         chain=str(raw["chain"]),
         token=str(raw["token"]),
         wallet=str(raw.get("wallet", "unknown")),
         side=str(raw.get("side", "buy")),
-        amount=float(raw["amount"]),
-        price=float(raw["price"]) if raw.get("price") is not None else None,
+        amount=_as_float(raw["amount"]),
+        price=_as_float(raw["price"]) if raw.get("price") is not None else None,
         source=str(raw.get("source", "unknown")),
         timestamp=_parse_timestamp(raw.get("timestamp")),
     )

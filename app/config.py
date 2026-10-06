@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -39,7 +39,7 @@ class Settings(BaseModel):
     chains: dict[str, ChainSettings]
 
 
-def _merge(base: dict, override: dict) -> dict:
+def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -49,7 +49,7 @@ def _merge(base: dict, override: dict) -> dict:
     return merged
 
 
-def _read_yaml(path: Path) -> dict:
+def _read_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as handle:
