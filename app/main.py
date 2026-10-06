@@ -54,7 +54,12 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--once", action="store_true", help="run one paper cycle and exit")
     parser.add_argument("--interval", type=float, default=5.0)
-    parser.add_argument("--report-interval", type=float, default=60.0)
+    parser.add_argument(
+        "--report-interval",
+        type=float,
+        default=None,
+        help="status interval in seconds; defaults to the strategy interval",
+    )
     parser.add_argument("--duration", type=float, default=None)
     args = parser.parse_args()
 
@@ -92,7 +97,7 @@ async def run_paper(
     *,
     once: bool = False,
     interval_seconds: float = 5.0,
-    report_interval_seconds: float = 60.0,
+    report_interval_seconds: float | None = None,
     duration_seconds: float | None = None,
 ) -> None:
     database_url = os.getenv("MEME_AGENT_DATABASE_URL", "sqlite:///meme_agent.sqlite3")
@@ -115,7 +120,11 @@ async def run_paper(
         initial_cash=initial_cash,
         risk=settings.risk,
     )
-    report_gate = ReportGate(report_interval_seconds)
+    report_gate = ReportGate(
+        report_interval_seconds
+        if report_interval_seconds is not None
+        else interval_seconds
+    )
 
     async def report(report: RuntimeReport) -> None:
         if not once and not report_gate.should_report(asyncio.get_running_loop().time()):
