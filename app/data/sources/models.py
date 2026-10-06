@@ -17,6 +17,7 @@ class PoolCandidate(BaseModel):
     dex_id: str
     base_token: str
     quote_token: str
+    base_is_token0: bool | None = None
     price_usd: float | None = Field(default=None, gt=0)
     reserve_usd: float | None = Field(default=None, ge=0)
     observed_at: datetime
