@@ -191,7 +191,7 @@ def build_market_source(
                 collection_timeout_seconds=20.0,
             ),
         )
-        discovery = GeckoTerminalSource(
+        solana_discovery = GeckoTerminalSource(
             "solana",
             settings.market.proxy_url,
             timeout_seconds=settings.market.http_timeout_seconds,
@@ -204,12 +204,12 @@ def build_market_source(
             timeout_seconds=chain_market.collection_timeout_seconds,
             max_retries=settings.market.max_retries,
         )
-        market_collector = SolanaMarketCollector(
+        solana_market_collector = SolanaMarketCollector(
             rpc,
             max_pools=3,
             max_signatures_per_pool=20,
         )
-        source = LiveMarketSource(discovery, market_collector, MarketFusion())
+        source = LiveMarketSource(solana_discovery, solana_market_collector, MarketFusion())
         return Collector(name, source.collect, repository, empty_status="observation_only")
     if chain.rpc_http and chain.chain_id is not None:
         adapter = EvmChainAdapter(

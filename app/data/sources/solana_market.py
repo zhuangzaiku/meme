@@ -132,7 +132,11 @@ def _parse_swap(
 ) -> Swap | None:
     meta = transaction.get("meta")
     message = _mapping_value(transaction.get("transaction"), "message")
-    if not isinstance(meta, Mapping) or meta.get("err") is not None or message is None:
+    if (
+        not isinstance(meta, Mapping)
+        or meta.get("err") is not None
+        or not isinstance(message, Mapping)
+    ):
         return None
     signer = _signer(message.get("accountKeys"))
     if signer is None:
