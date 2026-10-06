@@ -7,6 +7,8 @@ def test_default_mode_is_paper(tmp_path: Path) -> None:
     settings = load_settings(tmp_path / "missing.yaml")
     assert settings.execution_mode == "paper"
     assert settings.risk.risk_per_trade == 0.0025
+    assert settings.market.proxy_url == "http://127.0.0.1:7890"
+    assert settings.market.discovery_interval_seconds == 60
 
 
 def test_chain_endpoints_are_loaded_from_environment(monkeypatch, tmp_path: Path) -> None:

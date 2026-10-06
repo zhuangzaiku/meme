@@ -12,6 +12,14 @@ risk:
   cooldown_after_exit_minutes: 30
   allow_averaging_down: false
 
+market:
+  proxy_url: http://127.0.0.1:7890
+  discovery_interval_seconds: 60
+  max_pools_per_chain: 50
+  max_log_block_span: 1000
+  http_timeout_seconds: 10
+  max_retries: 3
+
 chains:
   bnb:
     name: BNB Smart Chain

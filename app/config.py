@@ -23,6 +23,15 @@ class RiskSettings(BaseModel):
     allow_averaging_down: bool = False
 
 
+class MarketSourceSettings(BaseModel):
+    proxy_url: str = "http://127.0.0.1:7890"
+    discovery_interval_seconds: int = 60
+    max_pools_per_chain: int = 50
+    max_log_block_span: int = 1000
+    http_timeout_seconds: float = 10.0
+    max_retries: int = 3
+
+
 class ChainSettings(BaseModel):
     name: str
     chain_id: int | None = None
@@ -36,6 +45,7 @@ class Settings(BaseModel):
 
     execution_mode: ExecutionMode = "paper"
     risk: RiskSettings = Field(default_factory=RiskSettings)
+    market: MarketSourceSettings = Field(default_factory=MarketSourceSettings)
     chains: dict[str, ChainSettings]
 
 
