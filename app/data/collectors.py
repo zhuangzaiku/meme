@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime
 
-from app.data.connector_health import ConnectorHealth
+from app.data.connector_health import ConnectorHealth, ConnectorStatus
 from app.data.events import MarketEvent, Swap
 from app.storage.repository import EventRepository
 
@@ -43,10 +43,12 @@ class Collector:
         source_name: str,
         event_source: Callable[[], Awaitable[Iterable[MarketEvent]]],
         repository: EventRepository,
+        empty_status: ConnectorStatus = "ready",
     ) -> None:
         self.source_name = source_name
         self.event_source = event_source
         self.repository = repository
+        self.empty_status = empty_status
         self.health = ConnectorHealth(source_name, "unavailable")
 
     async def run_once(self) -> list[MarketEvent]:
@@ -59,7 +61,7 @@ class Collector:
             self.repository.save_event(event)
         self.health = ConnectorHealth(
             self.source_name,
-            "ready",
+            self.empty_status if not events else "ready",
             last_event_at=events[-1].timestamp if events else None,
         )
         return events

@@ -11,6 +11,7 @@ from app.api.audit import AuditLog
 from app.api.routes import ControlState, create_router
 from app.api.websocket import create_websocket_router
 from app.chains.base import Quote
+from app.chains.evm import EvmChainAdapter
 from app.config import Settings, load_settings
 from app.data.collectors import Collector
 from app.data.events import MarketEvent
@@ -81,7 +82,12 @@ async def run_paper(
     initial_cash = 100_000.0
     broker = PaperBroker(lambda _: _unreachable_quote(), initial_cash=initial_cash)
     collectors = {
-        name: Collector(name, _unavailable_source(name, chain.rpc_http), repository)
+        name: Collector(
+            name,
+            _rpc_heartbeat_source(name, chain.rpc_http, chain.chain_id),
+            repository,
+            empty_status="observation_only",
+        )
         for name, chain in settings.chains.items()
     }
     runtime = PaperRuntime.from_risk_settings(
@@ -122,14 +128,31 @@ async def run_paper(
         print("meme-agent stopped")
 
 
-def _unavailable_source(
-    name: str, rpc_http: str | None
+def _rpc_heartbeat_source(
+    name: str, rpc_http: str | None, expected_chain_id: int | None
 ) -> Callable[[], Awaitable[Iterable[MarketEvent]]]:
-    async def source() -> Iterable[MarketEvent]:
-        detail = "RPC is not configured" if not rpc_http else "DEX event source is not configured"
-        raise ConnectionError(f"{name}: {detail}")
+    if rpc_http:
+        adapter = EvmChainAdapter(name, rpc_http)
 
-    return source
+        async def source() -> Iterable[MarketEvent]:
+            try:
+                observed_chain_id = await adapter.get_chain_id()
+                if expected_chain_id is None or observed_chain_id != expected_chain_id:
+                    raise ConnectionError(
+                        f"{name}: chain id mismatch, expected {expected_chain_id}, "
+                        f"got {observed_chain_id}"
+                    )
+                await adapter.get_latest_block()
+                return []
+            finally:
+                await adapter.web3.provider.disconnect()
+
+        return source
+
+    async def unavailable_source() -> Iterable[MarketEvent]:
+        raise ConnectionError(f"{name}: RPC is not configured")
+
+    return unavailable_source
 
 
 def _unreachable_quote() -> Quote:

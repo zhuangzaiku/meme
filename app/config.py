@@ -56,10 +56,29 @@ def _read_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(handle) or {}
 
 
+def _apply_network_registry(raw: dict[str, Any], project_root: Path) -> None:
+    registry = _read_yaml(project_root / "configs" / "networks.yaml")
+    chains = raw.setdefault("chains", {})
+    for name, metadata in registry.items():
+        if not isinstance(metadata, dict):
+            continue
+        chain = chains.setdefault(name, {})
+        for field in ("chain_id", "native_symbol"):
+            if chain.get(field) is None and metadata.get(field) is not None:
+                chain[field] = metadata[field]
+        rpc_reference = metadata.get("rpc_env")
+        if chain.get("rpc_http") is None and isinstance(rpc_reference, str):
+            if rpc_reference.startswith(("http://", "https://")):
+                chain["rpc_http"] = rpc_reference
+            elif os.getenv(rpc_reference):
+                chain["rpc_http"] = os.environ[rpc_reference]
+
+
 def load_settings(path: Path | None = None) -> Settings:
     project_root = Path(__file__).resolve().parent.parent
     default_path = project_root / "configs" / "default.yaml"
     raw = _merge(_read_yaml(default_path), _read_yaml(path) if path else {})
+    _apply_network_registry(raw, project_root)
 
     chains = raw.setdefault("chains", {})
     for key, env_name in (("bnb", "BNB_RPC_URL"), ("robinhood", "ROBINHOOD_RPC_URL")):

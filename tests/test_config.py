@@ -17,6 +17,14 @@ def test_chain_endpoints_are_loaded_from_environment(monkeypatch, tmp_path: Path
     assert settings.chains["robinhood"].rpc_http == "https://robinhood.example"
 
 
+def test_network_registry_provides_verified_defaults(tmp_path: Path) -> None:
+    settings = load_settings(tmp_path / "missing.yaml")
+
+    assert settings.chains["bnb"].rpc_http == "https://bsc-dataseed.bnbchain.org"
+    assert settings.chains["robinhood"].chain_id == 4663
+    assert settings.chains["robinhood"].rpc_http == "https://rpc.mainnet.chain.robinhood.com/"
+
+
 def test_invalid_mode_is_rejected(tmp_path: Path) -> None:
     config = tmp_path / "config.yaml"
     config.write_text("execution_mode: unsafe\n", encoding="utf-8")
