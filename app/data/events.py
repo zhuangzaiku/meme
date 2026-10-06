@@ -30,7 +30,7 @@ class Swap(MarketEvent):
     wallet: str
     side: str
     amount: float = Field(gt=0)
-    price: float = Field(gt=0)
+    price: float | None = Field(default=None, gt=0)
 
 
 class LiquidityChange(MarketEvent):
