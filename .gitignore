@@ -8,6 +8,8 @@ __pycache__/
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite3-*
+runtime/
 .env
 .env.*
 !.env.example
