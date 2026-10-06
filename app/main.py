@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import os
 from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass
 
 from fastapi import FastAPI
 
@@ -18,6 +19,20 @@ from app.data.events import MarketEvent
 from app.execution.paper_broker import PaperBroker
 from app.runtime import PaperRuntime, RuntimeReport
 from app.storage.repository import EventRepository
+
+
+@dataclass
+class ReportGate:
+    interval_seconds: float
+    _last_report_at: float | None = None
+
+    def should_report(self, now: float) -> bool:
+        if self.interval_seconds <= 0:
+            raise ValueError("report interval must be positive")
+        if self._last_report_at is not None and now - self._last_report_at < self.interval_seconds:
+            return False
+        self._last_report_at = now
+        return True
 
 
 def create_app() -> FastAPI:
@@ -39,6 +54,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--once", action="store_true", help="run one paper cycle and exit")
     parser.add_argument("--interval", type=float, default=5.0)
+    parser.add_argument("--report-interval", type=float, default=60.0)
     parser.add_argument("--duration", type=float, default=None)
     args = parser.parse_args()
 
@@ -65,6 +81,7 @@ def main() -> None:
             settings,
             once=args.once,
             interval_seconds=args.interval,
+            report_interval_seconds=args.report_interval,
             duration_seconds=args.duration,
         )
     )
@@ -75,6 +92,7 @@ async def run_paper(
     *,
     once: bool = False,
     interval_seconds: float = 5.0,
+    report_interval_seconds: float = 60.0,
     duration_seconds: float | None = None,
 ) -> None:
     database_url = os.getenv("MEME_AGENT_DATABASE_URL", "sqlite:///meme_agent.sqlite3")
@@ -97,8 +115,11 @@ async def run_paper(
         initial_cash=initial_cash,
         risk=settings.risk,
     )
+    report_gate = ReportGate(report_interval_seconds)
 
     async def report(report: RuntimeReport) -> None:
+        if not once and not report_gate.should_report(asyncio.get_running_loop().time()):
+            return
         statuses = ", ".join(
             f"{name}={health.status}" for name, health in report.health.items()
         )
