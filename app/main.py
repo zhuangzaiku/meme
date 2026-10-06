@@ -2,7 +2,24 @@ from __future__ import annotations
 
 import argparse
 
+from fastapi import FastAPI
+
+from app.api.audit import AuditLog
+from app.api.routes import ControlState, create_router
+from app.api.websocket import create_websocket_router
 from app.config import load_settings
+
+
+def create_app() -> FastAPI:
+    settings = load_settings()
+    state = ControlState(execution_mode=settings.execution_mode)
+    audit = AuditLog()
+    application = FastAPI(title="Meme Agent")
+    application.include_router(create_router(state, audit))
+    application.include_router(create_websocket_router(state))
+    application.state.control = state
+    application.state.audit = audit
+    return application
 
 
 def main() -> None:
