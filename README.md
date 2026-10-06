@@ -1,6 +1,7 @@
 # Meme Agent
 
-Paper-first realtime Meme strategy agent for BNB Smart Chain and Robinhood Chain.
+Paper-first realtime Meme strategy agent for BNB Smart Chain, Robinhood Chain,
+and Solana.
 
 The default mode is `paper`. Live signing is disabled until the virtual
 validation gate and approval-mode checks pass. Network endpoints are supplied
@@ -14,7 +15,9 @@ python3.12 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-Use `BNB_RPC_URL` and `ROBINHOOD_RPC_URL` for read-only connector endpoints.
+Use `BNB_RPC_URL`, `ROBINHOOD_RPC_URL`, and `SOLANA_RPC_URL` for read-only
+connector endpoint overrides. Solana defaults to
+`https://api.mainnet.solana.com` and uses `confirmed` JSON-RPC commitment.
 Market discovery uses the local proxy `MARKET_PROXY_URL` and defaults to
 `http://127.0.0.1:7890`. Do not place private keys in this repository.
 GMGN read-only Callout enrichment uses `GMGN_AK` and `GMGN_SK` when provided.
@@ -22,6 +25,13 @@ These are API signing credentials, not a wallet private key; keep them in the
 local environment and never commit them. GMGN enrichment currently targets
 BSC. Robinhood remains RPC/GeckoTerminal-only when GMGN does not list the
 chain.
+
+Solana discovery is candidate-driven: GeckoTerminal identifies bounded pool
+candidates, then the Solana RPC validates pool accounts, reads incremental
+transaction signatures, parses signer token-balance changes, and checks mint
+and freeze authority. Solana polls every 10 seconds with a 20-second collection
+timeout. Unknown transaction formats, missing security data, and unverified
+pool accounts remain `observation_only`; they cannot create a paper entry.
 
 BNB discovery uses the BSC JSON-RPC directly for verified PancakeSwap V2 and
 V3 factory events, then merges GeckoTerminal metadata as a fallback. The BNB
@@ -54,7 +64,8 @@ reports status with the same cadence. For a bounded run, use `--once` or
 `--duration 60`. It only creates paper orders after authoritative normalized
 events and the existing security/risk gates are available. A source that is
 reachable but has no verified event remains `observation_only` and submits no
-entry order.
+entry order. BNB, Robinhood, and Solana have independent scan intervals and
+timeouts, so a degraded Solana RPC does not stop the other two chains.
 
 ## Safe operation
 
