@@ -173,15 +173,23 @@ class PaperRuntime:
         self,
         *,
         interval_seconds: float = 5.0,
+        collection_timeout_seconds: float | None = None,
         stop_event: asyncio.Event | None = None,
         on_report: Callable[[RuntimeReport], Awaitable[None] | None] | None = None,
     ) -> None:
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
+        collection_timeout = (
+            interval_seconds
+            if collection_timeout_seconds is None
+            else collection_timeout_seconds
+        )
+        if collection_timeout <= 0:
+            raise ValueError("collection timeout must be positive")
         loop = asyncio.get_running_loop()
         next_run_at = loop.time()
         while stop_event is None or not stop_event.is_set():
-            report = await self.run_once(collection_timeout_seconds=interval_seconds)
+            report = await self.run_once(collection_timeout_seconds=collection_timeout)
             if on_report is not None:
                 callback_result = on_report(report)
                 if callback_result is not None:

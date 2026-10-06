@@ -29,6 +29,7 @@ class MarketSourceSettings(BaseModel):
     max_pools_per_chain: int = 2
     max_log_block_span: int = 25
     http_timeout_seconds: float = 10.0
+    collection_timeout_seconds: float = 10.0
     max_retries: int = 3
 
 

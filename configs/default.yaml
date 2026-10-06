@@ -18,6 +18,7 @@ market:
   max_pools_per_chain: 2
   max_log_block_span: 25
   http_timeout_seconds: 10
+  collection_timeout_seconds: 10
   max_retries: 3
 
 chains:

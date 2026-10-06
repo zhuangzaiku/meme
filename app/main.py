@@ -149,6 +149,7 @@ async def run_paper(
     try:
         await runtime.run_forever(
             interval_seconds=interval_seconds,
+            collection_timeout_seconds=settings.market.collection_timeout_seconds,
             stop_event=stop_event,
             on_report=report,
         )

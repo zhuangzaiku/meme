@@ -110,6 +110,37 @@ async def test_runtime_marks_slow_source_degraded_after_timeout(tmp_path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_run_forever_accepts_collection_timeout_separate_from_interval(tmp_path) -> None:
+    repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
+
+    async def slow_source() -> list[Swap]:
+        await asyncio.sleep(0.02)
+        return []
+
+    runtime = PaperRuntime(
+        {"bnb": Collector("bnb", slow_source, repository)},
+        PaperBroker(lambda _: None, initial_cash=100_000),
+        repository=repository,
+        initial_cash=100_000,
+    )
+    stop_event = asyncio.Event()
+    reports = []
+
+    async def on_report(report) -> None:
+        reports.append(report)
+        stop_event.set()
+
+    await runtime.run_forever(
+        interval_seconds=0.1,
+        collection_timeout_seconds=0.01,
+        stop_event=stop_event,
+        on_report=on_report,
+    )
+
+    assert reports[0].health["bnb"].status == "degraded"
+
+
+@pytest.mark.asyncio
 async def test_verified_market_events_reach_two_chain_paper_runtime(tmp_path) -> None:
     repository = EventRepository(f"sqlite:///{tmp_path / 'events.sqlite3'}")
     collectors: dict[str, Collector] = {}

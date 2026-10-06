@@ -9,6 +9,7 @@ def test_default_mode_is_paper(tmp_path: Path) -> None:
     assert settings.risk.risk_per_trade == 0.0025
     assert settings.market.proxy_url == "http://127.0.0.1:7890"
     assert settings.market.discovery_interval_seconds == 60
+    assert settings.market.collection_timeout_seconds == 10.0
 
 
 def test_chain_endpoints_are_loaded_from_environment(monkeypatch, tmp_path: Path) -> None:
