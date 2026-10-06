@@ -27,6 +27,9 @@ market:
     robinhood:
       poll_interval_seconds: 15
       collection_timeout_seconds: 30
+    sol:
+      poll_interval_seconds: 10
+      collection_timeout_seconds: 20
 
 external:
   enabled: true
@@ -68,3 +71,10 @@ chains:
     rpc_http: null
     rpc_ws: null
     native_symbol: null
+  sol:
+    name: Solana Mainnet
+    chain_id: null
+    rpc_http: null
+    rpc_ws: null
+    native_symbol: SOL
+    rpc_kind: solana

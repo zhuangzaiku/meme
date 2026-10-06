@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.data.sources.composite_discovery import CompositePoolDiscovery
+from app.data.sources.composite_discovery import CompositePoolDiscovery, _candidate_key
 from app.data.sources.models import PoolCandidate, SourceHealth
 
 NOW = datetime.now(UTC)
@@ -85,3 +85,28 @@ async def test_one_failed_source_does_not_block_healthy_source() -> None:
     assert len(pools) == 1
     assert source.health.status in {"ready", "observation_only"}
     assert "source unavailable" in (source.health.error or "")
+
+
+@pytest.mark.asyncio
+async def test_composite_discovery_keeps_chain_identity_in_candidate_key() -> None:
+    sol = PoolCandidate(
+        chain="sol",
+        network_id="solana",
+        pool_address="So11111111111111111111111111111111111111112",
+        dex_id="raydium",
+        base_token="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        quote_token="So11111111111111111111111111111111111111112",
+        observed_at=NOW,
+    )
+
+    assert _candidate_key(native_candidate()) != _candidate_key(sol)
+
+    source = CompositePoolDiscovery(
+        [FakeSource("bnb", [native_candidate()]), FakeSource("sol", [sol])]
+    )
+    pools = await source.discover_pools()
+
+    assert {(pool.chain, pool.pool_address) for pool in pools} == {
+        ("bnb", POOL),
+        ("sol", sol.pool_address),
+    }

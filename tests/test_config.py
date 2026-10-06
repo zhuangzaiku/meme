@@ -14,6 +14,8 @@ def test_default_mode_is_paper(tmp_path: Path) -> None:
     assert settings.market.per_chain["bnb"].collection_timeout_seconds == 10.0
     assert settings.market.per_chain["robinhood"].poll_interval_seconds == 15.0
     assert settings.market.per_chain["robinhood"].collection_timeout_seconds == 30.0
+    assert settings.market.per_chain["sol"].poll_interval_seconds == 10.0
+    assert settings.market.per_chain["sol"].collection_timeout_seconds == 20.0
 
 
 def test_native_bsc_discovery_defaults_are_verified(tmp_path: Path) -> None:
@@ -35,6 +37,17 @@ def test_chain_endpoints_are_loaded_from_environment(monkeypatch, tmp_path: Path
     settings = load_settings(tmp_path / "missing.yaml")
     assert settings.chains["bnb"].rpc_http == "https://bnb.example"
     assert settings.chains["robinhood"].rpc_http == "https://robinhood.example"
+
+
+def test_solana_defaults_and_environment_override(monkeypatch, tmp_path: Path) -> None:
+    settings = load_settings(tmp_path / "missing.yaml")
+
+    assert settings.chains["sol"].rpc_kind == "solana"
+    assert settings.chains["sol"].rpc_http == "https://api.mainnet.solana.com"
+
+    monkeypatch.setenv("SOLANA_RPC_URL", "https://sol.example")
+    overridden = load_settings(tmp_path / "missing.yaml")
+    assert overridden.chains["sol"].rpc_http == "https://sol.example"
 
 
 def test_network_registry_provides_verified_defaults(tmp_path: Path) -> None:

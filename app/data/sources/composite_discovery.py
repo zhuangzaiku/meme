@@ -27,7 +27,7 @@ class CompositePoolDiscovery:
             *(source.discover_pools() for source in ordered_sources),
             return_exceptions=True,
         )
-        merged: dict[str, PoolCandidate] = {}
+        merged: dict[tuple[str, str], PoolCandidate] = {}
         errors: list[str] = []
         successful_sources = 0
         for source, result in zip(ordered_sources, results, strict=True):
@@ -38,7 +38,7 @@ class CompositePoolDiscovery:
             if source.health.error:
                 errors.append(f"{source.health.name}: {source.health.error}")
             for candidate in result:
-                key = candidate.pool_address.lower()
+                key = _candidate_key(candidate)
                 previous = merged.get(key)
                 if previous is None:
                     merged[key] = candidate
@@ -70,3 +70,8 @@ def _merge_candidates(
     if authoritative.reserve_usd is None and metadata.reserve_usd is not None:
         updates["reserve_usd"] = metadata.reserve_usd
     return authoritative.model_copy(update=updates) if updates else authoritative
+
+
+def _candidate_key(candidate: PoolCandidate) -> tuple[str, str]:
+    address = candidate.pool_address if candidate.chain == "sol" else candidate.pool_address.lower()
+    return candidate.chain, address

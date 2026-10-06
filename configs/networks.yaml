@@ -13,3 +13,11 @@ robinhood:
   native_symbol: ETH
   explorer: robinhoodchain.blockscout.com
   rpc_env: https://rpc.mainnet.chain.robinhood.com/
+
+sol:
+  name: Solana Mainnet
+  chain_id: null
+  native_symbol: SOL
+  rpc_kind: solana
+  explorer: https://solscan.io
+  rpc_env: https://api.mainnet.solana.com

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from web3 import Web3
 
 ExecutionMode = Literal["paper", "approval", "auto"]
+RpcKind = Literal["evm", "solana"]
 
 
 class RiskSettings(BaseModel):
@@ -43,6 +44,10 @@ class MarketSourceSettings(BaseModel):
             "robinhood": MarketChainSettings(
                 poll_interval_seconds=15.0,
                 collection_timeout_seconds=30.0,
+            ),
+            "sol": MarketChainSettings(
+                poll_interval_seconds=10.0,
+                collection_timeout_seconds=20.0,
             ),
         }
     )
@@ -110,6 +115,7 @@ class ChainSettings(BaseModel):
     rpc_http: str | None = None
     rpc_ws: str | None = None
     native_symbol: str | None = None
+    rpc_kind: RpcKind = "evm"
 
 
 class Settings(BaseModel):
@@ -165,7 +171,11 @@ def load_settings(path: Path | None = None) -> Settings:
     _apply_network_registry(raw, project_root)
 
     chains = raw.setdefault("chains", {})
-    for key, env_name in (("bnb", "BNB_RPC_URL"), ("robinhood", "ROBINHOOD_RPC_URL")):
+    for key, env_name in (
+        ("bnb", "BNB_RPC_URL"),
+        ("robinhood", "ROBINHOOD_RPC_URL"),
+        ("sol", "SOLANA_RPC_URL"),
+    ):
         if os.getenv(env_name):
             chains.setdefault(key, {})["rpc_http"] = os.environ[env_name]
 
