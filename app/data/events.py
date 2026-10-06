@@ -69,3 +69,14 @@ class TokenSecurityUpdate(MarketEvent):
 class SocialActivity(MarketEvent):
     activity: str
     metrics: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExternalSignal(MarketEvent):
+    smart_money_score: float = Field(ge=0, le=100)
+    narrative_score: float = Field(ge=0, le=100)
+    social_score: float = Field(ge=0, le=100)
+    unique_callout_wallets: int = Field(ge=0)
+    callout_count: int = Field(ge=0)
+    kol_count: int = Field(ge=0)
+    topic_tags: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)

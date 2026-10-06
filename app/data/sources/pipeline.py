@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -19,17 +19,23 @@ class MarketCollector(Protocol):
     async def collect(self, candidates: list[PoolCandidate]) -> list[MarketEvent]: ...
 
 
+class ExternalSignalSource(Protocol):
+    async def collect(self, candidates: list[PoolCandidate]) -> Iterable[MarketEvent]: ...
+
+
 class LiveMarketSource:
     def __init__(
         self,
         discovery: PoolDiscovery,
         collector: MarketCollector,
         fusion: MarketFusion,
+        external_source: ExternalSignalSource | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.discovery = discovery
         self.collector = collector
         self.fusion = fusion
+        self.external_source = external_source
         self.clock = clock or (lambda: datetime.now(UTC))
 
     async def collect(self) -> list[MarketEvent]:
@@ -39,6 +45,8 @@ class LiveMarketSource:
             error = getattr(discovery_health, "error", None) or "discovery source degraded"
             raise ConnectionError(error)
         events = await self.collector.collect(candidates)
+        if self.external_source is not None:
+            events.extend(await self.external_source.collect(candidates))
         by_pool: dict[str, list[MarketEvent]] = {}
         for event in events:
             if event.pool_address is not None:

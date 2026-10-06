@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.data.events import (
     DevTransfer,
+    ExternalSignal,
     HolderSnapshot,
     LiquidityChange,
     MarketEvent,
@@ -29,6 +30,7 @@ EVENT_TYPES = {
         WalletBuy,
         WalletSell,
         DevTransfer,
+        ExternalSignal,
         TokenSecurityUpdate,
         SocialActivity,
     )

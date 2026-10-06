@@ -58,3 +58,33 @@ async def test_discovery_retries_then_marks_degraded() -> None:
     assert await source.discover_pools() == []
     assert len(calls) == 3
     assert source.health.status == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_discovery_uses_recent_cache_when_rate_limited() -> None:
+    payload = json.loads(
+        (FIXTURE_DIR / "geckoterminal_robinhood_pools.json").read_text(encoding="utf-8")
+    )
+    responses = [
+        httpx.Response(200, json=payload),
+        httpx.Response(429, text="rate limited"),
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return responses.pop(0)
+
+    source = GeckoTerminalSource(
+        "robinhood",
+        "http://127.0.0.1:7890",
+        cache_seconds=0,
+        max_retries=0,
+        transport=httpx.MockTransport(handler),
+    )
+
+    first = await source.discover_pools()
+    second = await source.discover_pools()
+
+    assert len(first) == 1
+    assert second == first
+    assert source.health.status == "observation_only"
+    assert source.health.error == "http 429; using cached pools"

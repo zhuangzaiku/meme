@@ -30,3 +30,26 @@ def test_blocked_candidate_cannot_be_armed() -> None:
     )
     result = score_candidate(candidate)
     assert result.action == "BLOCK"
+
+
+def test_external_callout_signal_increases_candidate_score() -> None:
+    base = CandidateSnapshot(
+        wallet_quality=10,
+        contract_distribution=15,
+        capital_flow=10,
+        narrative_social=4,
+        market_position=5,
+        independent_wallets=3,
+        confirmation_signals=2,
+        risk_decision=RiskDecision.allow(),
+    )
+    enriched = CandidateSnapshot(
+        **{
+            **base.__dict__,
+            "external_smart_money": 80,
+            "external_narrative": 70,
+            "external_social": 60,
+        }
+    )
+
+    assert score_candidate(enriched).score > score_candidate(base).score

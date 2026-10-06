@@ -5,12 +5,11 @@ bnb:
   chain_id: 56
   native_symbol: BNB
   explorer: https://bscscan.com
-  rpc_env: BNB_RPC_URL
+  rpc_env: https://bsc-dataseed.bnbchain.org
 
 robinhood:
   name: Robinhood Chain
-  chain_id: null
-  native_symbol: null
-  explorer: null
-  rpc_env: ROBINHOOD_RPC_URL
-  status: unverified
+  chain_id: 4663
+  native_symbol: ETH
+  explorer: robinhoodchain.blockscout.com
+  rpc_env: https://rpc.mainnet.chain.robinhood.com/

@@ -11,6 +11,11 @@ WEIGHTS = {
     "narrative_social": 10,
     "market_position": 10,
 }
+EXTERNAL_WEIGHTS = {
+    "external_smart_money": 10,
+    "external_narrative": 5,
+    "external_social": 5,
+}
 
 
 @dataclass(frozen=True)
@@ -24,6 +29,9 @@ class CandidateSnapshot:
     confirmation_signals: int
     risk_decision: RiskDecision
     trade_shape: str | None = None
+    external_smart_money: float = 0.0
+    external_narrative: float = 0.0
+    external_social: float = 0.0
 
     def with_independent_wallets(self, count: int) -> CandidateSnapshot:
         return replace(self, independent_wallets=count)
@@ -45,10 +53,20 @@ def score_candidate(candidate: CandidateSnapshot) -> ScoreResult:
     if candidate.risk_decision.action == "BLOCK":
         return ScoreResult("BLOCK", 0.0, [], candidate.risk_decision.reasons)
 
-    score = sum(
+    base_score = sum(
         _bounded(getattr(candidate, name), maximum) for name, maximum in WEIGHTS.items()
     )
-    evidence = [f"score={score:.1f}", f"independent_wallets={candidate.independent_wallets}"]
+    score = base_score * 0.8 + sum(
+        _bounded(getattr(candidate, name), maximum)
+        for name, maximum in EXTERNAL_WEIGHTS.items()
+    )
+    evidence = [
+        f"score={score:.1f}",
+        f"independent_wallets={candidate.independent_wallets}",
+        f"external_smart_money={candidate.external_smart_money:.1f}",
+        f"external_narrative={candidate.external_narrative:.1f}",
+        f"external_social={candidate.external_social:.1f}",
+    ]
     if candidate.independent_wallets < 3:
         return ScoreResult("WATCH", score, evidence, [])
     if candidate.confirmation_signals < 2:

@@ -11,6 +11,7 @@ from app.chains.base import Quote
 from app.data.collectors import Collector
 from app.data.connector_health import ConnectorHealth
 from app.data.events import (
+    ExternalSignal,
     HolderSnapshot,
     LiquidityChange,
     MarketEvent,
@@ -285,6 +286,7 @@ class PaperRuntime:
         now = datetime.now(UTC)
         latest_security = self._latest(events, TokenSecurityUpdate)
         latest_liquidity = self._latest(events, LiquidityChange)
+        latest_external = self._latest(events, ExternalSignal)
         latest_quote = prices[-1]
         swaps = [event for event in events if isinstance(event, Swap)]
         buy_swaps = [event for event in swaps if event.side.lower() == "buy"]
@@ -302,6 +304,10 @@ class PaperRuntime:
         quote_fresh = self.freshness.is_fresh("quote", latest_quote.timestamp, now)
         security_ok = latest_security is not None and latest_security.passed
         liquidity_ok = latest_liquidity is not None and latest_liquidity.liquidity > 0
+        external_fresh = latest_external is not None and self.freshness.is_fresh(
+            "social", latest_external.timestamp, now
+        )
+        external = latest_external if external_fresh else None
         if latest_security is None:
             risk_decision = TokenRiskDecision.block("missing security data")
         elif not latest_security.passed:
@@ -314,18 +320,42 @@ class PaperRuntime:
             risk_decision = TokenRiskDecision.allow()
 
         flow_ratio = buy_value / max(sell_value, 1e-12)
+        external_wallets = external.unique_callout_wallets if external is not None else 0
+        independent_wallets = max(independent_wallets, external_wallets)
         candidate = CandidateSnapshot(
-            wallet_quality=min(25.0, independent_wallets * 25.0 / 3.0),
+            wallet_quality=max(
+                min(25.0, independent_wallets * 25.0 / 3.0),
+                external.smart_money_score * 0.25 if external is not None else 0.0,
+            ),
             contract_distribution=min(30.0, independent_wallets * 10.0),
-            capital_flow=25.0 if buy_value > sell_value and buy_value > 0 else 0.0,
-            narrative_social=10.0 if social_present else 0.0,
+            capital_flow=max(
+                25.0 if buy_value > sell_value and buy_value > 0 else 0.0,
+                external.smart_money_score * 0.25 if external is not None else 0.0,
+            ),
+            narrative_social=max(
+                10.0 if social_present else 0.0,
+                (
+                    external.narrative_score * 0.06 + external.social_score * 0.04
+                    if external is not None
+                    else 0.0
+                ),
+            ),
             market_position=10.0 if len(prices) >= 2 else 0.0,
             independent_wallets=independent_wallets,
             confirmation_signals=sum(
-                (independent_wallets >= 3, security_ok, liquidity_ok, social_present)
+                (
+                    independent_wallets >= 3,
+                    security_ok,
+                    liquidity_ok,
+                    social_present,
+                    external is not None and external.smart_money_score >= 50,
+                )
             ),
             risk_decision=risk_decision,
             trade_shape="early_convergence" if independent_wallets >= 3 else None,
+            external_smart_money=external.smart_money_score if external is not None else 0.0,
+            external_narrative=external.narrative_score if external is not None else 0.0,
+            external_social=external.social_score if external is not None else 0.0,
         )
         score_result = score_candidate(candidate)
         return StrategySnapshot(

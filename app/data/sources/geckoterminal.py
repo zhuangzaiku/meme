@@ -21,11 +21,14 @@ class GeckoTerminalSource:
         transport: httpx.AsyncBaseTransport | None = None,
         retry_base_seconds: float = 0.25,
         cache_seconds: int = 60,
+        stale_cache_seconds: int = 300,
     ) -> None:
         if max_retries < 0:
             raise ValueError("max_retries must be non-negative")
         if max_pools < 1:
             raise ValueError("max_pools must be positive")
+        if stale_cache_seconds < cache_seconds:
+            raise ValueError("stale_cache_seconds must be at least cache_seconds")
         self.network_id = network_id
         self.proxy_url = proxy_url
         self.timeout_seconds = timeout_seconds
@@ -34,6 +37,7 @@ class GeckoTerminalSource:
         self.transport = transport
         self.retry_base_seconds = retry_base_seconds
         self.cache_seconds = cache_seconds
+        self.stale_cache_seconds = stale_cache_seconds
         self.health = SourceHealth(name=f"geckoterminal:{network_id}", status="unavailable")
         self._cache: list[PoolCandidate] = []
         self._cached_at: datetime | None = None
@@ -82,6 +86,16 @@ class GeckoTerminalSource:
             if attempt < self.max_retries:
                 await asyncio.sleep(self.retry_base_seconds * (2**attempt))
 
+        if self._cached_at is not None and (
+            now - self._cached_at
+        ).total_seconds() <= self.stale_cache_seconds:
+            self.health = SourceHealth(
+                name=f"geckoterminal:{self.network_id}",
+                status="observation_only",
+                error=f"{last_error}; using cached pools",
+                observed_at=now,
+            )
+            return list(self._cache)
         self.health = SourceHealth(
             name=f"geckoterminal:{self.network_id}",
             status="degraded",
