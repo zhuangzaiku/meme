@@ -1,0 +1,19 @@
+{
+  "data": [
+    {
+      "id": "robinhood_0x00000000000000000000000000000000000000aa",
+      "type": "pool",
+      "attributes": {
+        "address": "0x00000000000000000000000000000000000000AA",
+        "base_token_price_usd": "0.0212",
+        "reserve_in_usd": "482318.17",
+        "pool_created_at": "2026-10-05T23:24:14Z"
+      },
+      "relationships": {
+        "base_token": {"data": {"id": "robinhood_0x00000000000000000000000000000000000000bb"}},
+        "quote_token": {"data": {"id": "robinhood_0x00000000000000000000000000000000000000cc"}},
+        "dex": {"data": {"id": "uniswap-v3-robinhood"}}
+      }
+    }
+  ]
+}
